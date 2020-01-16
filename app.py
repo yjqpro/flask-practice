@@ -22,6 +22,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
 
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
+login_manager.login_view = 'login'
 
 
 class LoginForm(FlaskForm):
@@ -63,9 +64,9 @@ def load_user(user_id):
     return User.query.filter_by(username=user_id).one_or_none()
 
 
-@login_manager.unauthorized_handler
-def unauthorized():
-    return redirect(url_for('login'))
+# @login_manager.unauthorized_handler
+# def unauthorized():
+    # return redirect(url_for('login'))
 
 
 @app.route('/', methods=['GET'])
