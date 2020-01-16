@@ -6,13 +6,18 @@ from flask import (
     redirect,
     url_for,
     render_template)
-from flask_login import (LoginManager, UserMixin, login_user, login_required)
+from flask_login import (
+    LoginManager,
+    UserMixin,
+    login_user,
+    login_required,
+    current_user)
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, SubmitField
 from wtforms.validators import DataRequired
 from flask_sqlalchemy import SQLAlchemy
-
-
+from flask_admin import Admin, AdminIndexView, expose
+from flask_admin.contrib.sqla import ModelView
 
 
 app = Flask(__name__)
@@ -23,6 +28,22 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
 db = SQLAlchemy(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
+
+
+class FooAdminIndexView(AdminIndexView):
+    def is_accessible(self):
+        print(f"current_user.is_authenticated:{current_user.is_authenticated}")
+        return current_user.is_authenticated
+
+    def inaccessible_callback(self, name, **kwargs):
+        return redirect(url_for('login', next=request.url))
+
+    @expose('/')
+    def index(self):
+        return self.render('admin/index.html')
+
+
+admin_app = Admin(app, name='foo', index_view=FooAdminIndexView())
 
 
 class LoginForm(FlaskForm):
@@ -55,18 +76,16 @@ class User(db.Model, UserMixin):
     def get_id(self):
         return self.id
 
+
 db.create_all()
+
+admin_app.add_view(ModelView(User, db.session))
 
 
 @login_manager.user_loader
 def load_user(user_id):
     print(user_id)
-    return User.query.filter_by(username=user_id).one_or_none()
-
-
-# @login_manager.unauthorized_handler
-# def unauthorized():
-    # return redirect(url_for('login'))
+    return User.query.get(user_id)
 
 
 @app.route('/', methods=['GET'])
@@ -97,7 +116,7 @@ def register():
         try:
             db.session.add(user)
             db.session.commit()
-        except:
+        except BaseException:
             db.session.rollback()
 
         flash('Register in successfully.')
@@ -118,8 +137,8 @@ def login():
     # client-side form data. For example, WTForms is a library that will
     # handle this for us, and we use a custom LoginForm to validate.
     form = LoginForm()
-    print(form.validate_on_submit())
     if form.validate_on_submit():
+        print('------------', form.username.data)
         user = User.query.filter_by(username=form.username.data).one_or_none()
         if user:
             login_user(user)
@@ -134,5 +153,6 @@ def login():
         # if not is_safe_url(next):
         # return abort(400)
 
+        print(next)
         return redirect(next or url_for('index'))
     return render_template('login.html', form=form)
