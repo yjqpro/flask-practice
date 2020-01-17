@@ -1,3 +1,9 @@
+import os
+from random import choice
+import string
+import time
+from io import BytesIO
+from datetime import timedelta
 from flask import (
     Flask,
     request,
@@ -6,7 +12,9 @@ from flask import (
     redirect,
     url_for,
     session,
-    render_template)
+    render_template,
+    send_file
+)
 from flask_login import (
     LoginManager,
     UserMixin,
@@ -18,14 +26,21 @@ from wtforms import StringField, PasswordField, SubmitField
 from wtforms.validators import DataRequired
 from flask_admin import Admin, AdminIndexView, expose
 from flask_admin.contrib.sqla import ModelView
+from flask_session import Session
 from extensions import db, admin, login_manager
 from models import User
 from admin_view import FooAdminIndexView, AuthenticationModelView
+import captcha_util
+
 
 app = Flask(__name__)
 
-app.config['SECRET_KEY'] = '12345678'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
+# app.config['SECRET_KEY'] = os.urandom(24)
+# app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///my.db'
+app.config['SESSION_TYPE'] = 'sqlalchemy'
+app.config['SESSION_SQLALCHEMY'] = db
+Session(app)
 
 
 def init_extensions(app):
@@ -38,6 +53,7 @@ def init_extensions(app):
 
 init_extensions(app)
 
+
 class LoginForm(FlaskForm):
     username = StringField('Username', validators=[DataRequired()])
     password = PasswordField('Password', validators=[DataRequired()])
@@ -48,8 +64,6 @@ class RegisterForm(FlaskForm):
     username = StringField('Username', validators=[DataRequired()])
     password = PasswordField('Password', validators=[DataRequired()])
     submit = SubmitField('Submit')
-
-
 
 
 @login_manager.user_loader
@@ -133,3 +147,41 @@ def login():
 def init_db():
     db.create_all()
     return 'init db'
+
+
+@app.route('/set-session', methods=['GET'])
+def set_session():
+    session['urandom'] = os.urandom(24)
+    return 'ok'
+
+
+@app.route('/get-session', methods=['GET'])
+def get_session():
+    return session['urandom']
+
+
+@app.route('/verify-code', methods=['GET'])
+def verify_code():
+    # chars = string.ascii_letters + string.digits
+    # verify_code = ''.join([choice(chars) for i in range(4)])
+    # session['register_verify_code'] = verify_code
+    # session['register_verify_code_expiry_time'] = int(
+        # time.time()) + timedelta(minutes=3).total_seconds()
+    # return verify_code
+    img, verify_code = captcha_util.create_validate_code()
+    session['register_verify_code'] = verify_code
+    session['register_verify_code_expiry_time'] = int(
+        time.time()) + timedelta(minutes=3).total_seconds()
+    image_binary = BytesIO()
+    img.save(image_binary, format='JPEG')
+    image_binary.seek(0, 0)
+    return send_file(
+        image_binary,
+        mimetype='image/jpeg',
+        as_attachment=True,
+        attachment_filename="verify_code.jpg")
+
+
+@app.route('/check-verify-code', methods=['GET'])
+def check_verify_code():
+    pass
